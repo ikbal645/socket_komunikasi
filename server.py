@@ -1,34 +1,50 @@
 import socket
+import threading
 
-HOST = '127.0.0.1' 
-PORT = 65432        
+# Menyimpan semua koneksi client
+clients = []
 
-print("--- PROGRAM SERVER DIMULAI ---")
+# Broadcast pesan ke semua client
+def broadcast(message, client_socket):
+    for client in clients:
+        if client != client_socket:
+            try:
+                client.send(message)
+            except:
+                client.close()
+                if client in clients:
+                    clients.remove(client)
 
-try:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, PORT))
-        print(f" Socket berhasil diikat ke {HOST}:{PORT}")
-        s.listen() # Hapus batasan 1
-        print("Server sedang mendengarkan koneksi dari client (Running Forever)...")
-        
-        # Tambahkan perulangan tak terbatas untuk menerima banyak koneksi
-        while True:
-            # Server akan terblokir di sini, menunggu koneksi
-            conn, addr = s.accept()
-            with conn:
-                print(f"\n KONEKSI BARU: Terhubung oleh {addr}")
-                
-                data = conn.recv(1024) 
-                
-                if data:
-                    pesan_diterima = data.decode('utf-8')
-                    print(f"Pesan Diterima: >>> {pesan_diterima}")
-                    
-                    pesan_balasan = f"Server menerima pesan Anda: '{pesan_diterima[:20]}...' [CONFIRMED]"
-                    conn.sendall(pesan_balasan.encode('utf-8'))
-                    print(" Mengirim balasan konfirmasi.")
-                    
-except Exception as e:
-    print(f" Terjadi kesalahan pada Server: {e}")
-# Hapus finally: program tidak akan selesai kecuali dihentikan paksa (Ctrl+C)
+# Menangani pesan dari client
+def handle_client(client_socket, address):
+    print(f"[+] {address} terhubung.")
+    while True:
+        try:
+            message = client_socket.recv(1024)
+            if message:
+                print(f"[{address}] {message.decode()}")
+                broadcast(message, client_socket)
+            else:
+                raise Exception("Client disconnected")
+        except:
+            print(f"[-] {address} terputus.")
+            client_socket.close()
+            if client_socket in clients:
+                clients.remove(client_socket)
+            break
+
+# Main function
+def start_server(host='127.0.0.1', port=5555):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((host, port))
+    server.listen()
+    print(f"[*] Server berjalan di {host}:{port}")
+
+    while True:
+        client_socket, addr = server.accept()
+        clients.append(client_socket)
+        thread = threading.Thread(target=handle_client, args=(client_socket, addr))
+        thread.start()
+
+if __name__ == "__main__":
+    start_server()
